@@ -17,5 +17,7 @@ public class Test {
     public static void main(String[] args) {
         System.out.println(">>>>>>>>>");
         HashMap<String,String> hashMap1 = new HashMap<String, String>(15,0.75f);
+        hashMap1.put(null,"23");
+        hashMap1.get(null);
     }
 }

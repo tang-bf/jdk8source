@@ -2220,25 +2220,25 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
             return root;
         }
-
+//插入红黑树逻辑   新节点首先是红的；
         static <K,V> TreeNode<K,V> balanceInsertion(TreeNode<K,V> root,
                                                     TreeNode<K,V> x) {
             x.red = true;
-            for (TreeNode<K,V> xp, xpp, xppl, xppr;;) {
+            for (TreeNode<K,V> xp, xpp, xppl, xppr;;) {  //xp 表示x的父节点 xpp 祖父节点 xppl 叔左节点
                 if ((xp = x.parent) == null) {
-                    x.red = false;
+                    x.red = false;//如果x没有父节点 x是第一个节点 自动为黑色
                     return x;
                 }
-                else if (!xp.red || (xpp = xp.parent) == null)
+                else if (!xp.red || (xpp = xp.parent) == null) //父节点不是红色 或者x没有祖父节点 父节点是根节点 不需要操作
                     return root;
-                if (xp == (xppl = xpp.left)) {
-                    if ((xppr = xpp.right) != null && xppr.red) {
+                if (xp == (xppl = xpp.left)) {    //x的父节点是红色 如果x父节点是祖父节点的左孩子节点
+                    if ((xppr = xpp.right) != null && xppr.red) {//叔叔节点时红的   叔叔 父都变 黑色 祖父变红色
                         xppr.red = false;
                         xp.red = false;
                         xpp.red = true;
-                        x = xpp;
+                        x = xpp; //可能需需要递归向上调整
                     }
-                    else {
+                    else { //叔叔节点是空的或者是黑色的  旋转变色  父节点 祖父节点都变色
                         if (x == xp.right) {
                             root = rotateLeft(root, x = xp);
                             xpp = (xp = x.parent) == null ? null : xp.parent;
