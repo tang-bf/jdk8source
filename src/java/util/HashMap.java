@@ -336,7 +336,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     static final int hash(Object key) {
         int h;
-        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);//jdk 7 扰动了四次
     }
 
     /**
@@ -626,17 +626,17 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                    boolean evict) {
         Node<K,V>[] tab; Node<K,V> p; int n, i;
         if ((tab = table) == null || (n = tab.length) == 0)
-            n = (tab = resize()).length;
+            n = (tab = resize()).length;// 初始化  或者扩容
         if ((p = tab[i = (n - 1) & hash]) == null)
-            tab[i] = newNode(hash, key, value, null);
+            tab[i] = newNode(hash, key, value, null);//直接赋值
         else {
             Node<K,V> e; K k;
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
-                e = p;
-            else if (p instanceof TreeNode)
+                e = p;//key相同的话  执行 e！=null  oldvalue替换
+            else if (p instanceof TreeNode)//红黑树分支 类似都要插入比较调整root
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-            else {
+            else {//bincount 链表的逻辑 其实是第九个来的时候开始出发有可能的树化 后面还会再判断数组长度是不是大于等于64，才会真正树华
                 for (int binCount = 0; ; ++binCount) {
                     if ((e = p.next) == null) {
                         p.next = newNode(hash, key, value, null);
@@ -650,7 +650,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     p = e;
                 }
             }
-            if (e != null) { // existing mapping for key
+            if (e != null) { // existing mapping for key 替换old value
                 V oldValue = e.value;
                 if (!onlyIfAbsent || oldValue == null)
                     e.value = value;
@@ -659,7 +659,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
         }
         ++modCount;
-        if (++size > threshold)
+        if (++size > threshold)//1.7的扩容 还限定了当前table[i] !=null 1.7先扩容再插入
             resize();
         afterNodeInsertion(evict);
         return null;
@@ -710,9 +710,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     oldTab[j] = null;
                     if (e.next == null)
                         newTab[e.hash & (newCap - 1)] = e;
-                    else if (e instanceof TreeNode)
+                    else if (e instanceof TreeNode)//红黑树的转移
                         ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
-                    else { // preserve order
+                    else { // preserve order  链表元素的转移
                         Node<K,V> loHead = null, loTail = null;
                         Node<K,V> hiHead = null, hiTail = null;
                         Node<K,V> next;
@@ -755,12 +755,12 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     final void treeifyBin(Node<K,V>[] tab, int hash) {
         int n, index; Node<K,V> e;
         if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY)
-            resize();
+            resize();//扩容或者初始化
         else if ((e = tab[index = (n - 1) & hash]) != null) {
             TreeNode<K,V> hd = null, tl = null;
-            do {
+            do { //replacementTreeNode  将e 是node对象 替换为new TreeNode<>(p.hash, p.key, p.value, next); 双向链表
                 TreeNode<K,V> p = replacementTreeNode(e, null);
-                if (tl == null)
+                if (tl == null) //TreeNode<K,V> extends LinkedHashMap.Entry<K,V> {  class Entry<K,V> extends HashMap.Node<K,V> {
                     hd = p;
                 else {
                     p.prev = tl;
@@ -769,7 +769,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                 tl = p;
             } while ((e = e.next) != null);
             if ((tab[index] = hd) != null)
-                hd.treeify(tab);
+                hd.treeify(tab);//真正的树华逻辑
         }
     }
 
@@ -833,10 +833,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                         p = e;
                     } while ((e = e.next) != null);
                 }
-            }
+            }// 提供了匹配到value的时候才真正去移除
             if (node != null && (!matchValue || (v = node.value) == value ||
                                  (value != null && value.equals(v)))) {
-                if (node instanceof TreeNode)
+                if (node instanceof TreeNode)//  removeTreeNode 并不是双向链表就是那个treenode）长度6的时候从红黑树退化为单向链表
                     ((TreeNode<K,V>)node).removeTreeNode(this, tab, movable);
                 else if (node == p)
                     tab[index] = node.next;
@@ -1846,7 +1846,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     root.next = first;
                     root.prev = null;
                 }
-                assert checkInvariants(root);
+                assert checkInvariants(root);//检验是否符合红黑树定义
             }
         }
 
@@ -1942,13 +1942,13 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                                 xp.left = x;
                             else
                                 xp.right = x;
-                            root = balanceInsertion(root, x);
+                            root = balanceInsertion(root, x);//平衡调整变色
                             break;
                         }
                     }
                 }
             }
-            moveRootToFront(tab, root);
+            moveRootToFront(tab, root);//将红黑树中的root节点放在链表的头
         }
 
         /**
@@ -2050,7 +2050,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     && (root.right == null
                         || (rl = root.left) == null
                         || rl.left == null))) {
-                tab[index] = first.untreeify(map);  // too small
+                tab[index] = first.untreeify(map);  // too small 退化为单向链表
                 return;
             }
             TreeNode<K,V> p = this, pl = left, pr = right, replacement;
@@ -2140,7 +2140,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             // Relink into lo and hi lists, preserving order
             TreeNode<K,V> loHead = null, loTail = null;
             TreeNode<K,V> hiHead = null, hiTail = null;
-            int lc = 0, hc = 0;
+            int lc = 0, hc = 0;//低位 高位的有多少
             for (TreeNode<K,V> e = b, next; e != null; e = next) {
                 next = (TreeNode<K,V>)e.next;
                 e.next = null;
@@ -2163,15 +2163,15 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
 
             if (loHead != null) {
-                if (lc <= UNTREEIFY_THRESHOLD)
-                    tab[index] = loHead.untreeify(map);
+                if (lc <= UNTREEIFY_THRESHOLD)//链表个数小于等于6
+                    tab[index] = loHead.untreeify(map);//变成链表 将treenode 替换为node
                 else {
                     tab[index] = loHead;
                     if (hiHead != null) // (else is already treeified)
-                        loHead.treeify(tab);
+                        loHead.treeify(tab);//调整平衡树
                 }
             }
-            if (hiHead != null) {
+            if (hiHead != null) { //低位逻辑
                 if (hc <= UNTREEIFY_THRESHOLD)
                     tab[index + bit] = hiHead.untreeify(map);
                 else {
@@ -2240,7 +2240,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     }
                     else { //叔叔节点是空的或者是黑色的  旋转变色  父节点 祖父节点都变色
                         if (x == xp.right) {
-                            root = rotateLeft(root, x = xp);
+                            root = rotateLeft(root, x = xp);//改变指针 左旋 比较绕
                             xpp = (xp = x.parent) == null ? null : xp.parent;
                         }
                         if (xp != null) {
