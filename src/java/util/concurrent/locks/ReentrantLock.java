@@ -229,17 +229,21 @@ public class ReentrantLock implements Lock, java.io.Serializable {
          * recursive call or no waiters or is first.
          */
         protected final boolean tryAcquire(int acquires) {
+            //当前线程
             final Thread current = Thread.currentThread();
+            //lock锁状态  0的时候自有 被上锁为1 大于1 表示可重入
             int c = getState();
-            if (c == 0) {
-                if (!hasQueuedPredecessors() &&
-                    compareAndSetState(0, acquires)) {
-                    setExclusiveOwnerThread(current);
+            if (c == 0) {  //没人占用  去上锁----1、锁是自由状态
+                if (!hasQueuedPredecessors() &&  //判断自己是否需要排队  是否需要排队情况有点多
+                    compareAndSetState(0, acquires)) { //不需要排队则进行cas尝试加锁，如果加锁成功则把当前线程设置为拥有锁的线程
+                    setExclusiveOwnerThread(current);//设置当期线程用有所  为了后续判断可重入使用
                     return true;
                 }
             }
+            //不等于0  并且当前线程不等于持有锁的线程  也不会进else if 分支，直接返回false  加锁失败
+            // C不等于0，但是当前线程等于拥有锁的线程则表示这是一次重入  直接把状态+1表示重入次数+1
             else if (current == getExclusiveOwnerThread()) {
-                int nextc = c + acquires;
+                int nextc = c + acquires;//也侧面说明了reentrantlock是可以重入的，因为如果是重入也返回true，也能lock成功
                 if (nextc < 0)
                     throw new Error("Maximum lock count exceeded");
                 setState(nextc);
@@ -253,7 +257,8 @@ public class ReentrantLock implements Lock, java.io.Serializable {
      * Creates an instance of {@code ReentrantLock}.
      * This is equivalent to using {@code ReentrantLock(false)}.
      */
-    public ReentrantLock() {
+    public ReentrantLock() { //默认非公平锁  公平非公平的区别就是 公平需要判断自己是否需要排队
+        // 非公平的上来就是cas 看能不能加锁成功，如果不成功就乖乖排队，调用acquire，不管公平非公平 只要进了aqs队列就会排队。
         sync = new NonfairSync();
     }
 

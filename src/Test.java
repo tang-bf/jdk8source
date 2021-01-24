@@ -1,4 +1,5 @@
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @ProjectName: jdk8source
@@ -19,5 +20,6 @@ public class Test {
         HashMap<String,String> hashMap1 = new HashMap<String, String>(15,0.75f);
         hashMap1.put(null,"23");
         hashMap1.get(null);
+        ConcurrentHashMap
     }
 }
