@@ -125,6 +125,19 @@ public class ReentrantLock implements Lock, java.io.Serializable {
         /**
          * Performs non-fair tryLock.  tryAcquire is implemented in
          * subclasses, but both need nonfair try for trylock method.
+         *
+         * SHARED	表示线程以共享的模式等待锁
+         * EXCLUSIVE	表示线程正在以独占的方式等待锁
+         *
+         * 0	当一个Node被初始化的时候的默认值
+         * CANCELLED	为1，表示线程获取锁的请求已经取消了
+         * CONDITION	为-2，表示节点在等待队列中，节点线程等待唤醒
+         * PROPAGATE	为-3，当前线程处在SHARED情况下，该字段才会使用
+         * SIGNAL	为-1，表示线程已经准备好了，就等资源释放了
+         * 一般来说，自定义同步器要么是独占方式，要么是共享方式，
+         * 它们也只需实现tryAcquire-tryRelease、tryAcquireShared-tryReleaseShared中的一种即可。
+         * AQS也支持自定义同步器同时实现独占和共享两种方式，
+         * 如ReentrantReadWriteLock。ReentrantLock是独占锁，所以实现了tryAcquire-tryRelease。
          */
         final boolean nonfairTryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
@@ -146,11 +159,11 @@ public class ReentrantLock implements Lock, java.io.Serializable {
         }
 
         protected final boolean tryRelease(int releases) {
-            int c = getState() - releases;
-            if (Thread.currentThread() != getExclusiveOwnerThread())
+            int c = getState() - releases; //减少可重入次数
+            if (Thread.currentThread() != getExclusiveOwnerThread()) // 当前线程不是持有锁的线程，抛出异常
                 throw new IllegalMonitorStateException();
             boolean free = false;
-            if (c == 0) {
+            if (c == 0) { // 如果持有线程全部释放，将当前独占锁所有线程设置为null，并更新state
                 free = true;
                 setExclusiveOwnerThread(null);
             }

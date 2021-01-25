@@ -642,7 +642,7 @@ public abstract class AbstractQueuedSynchronizer
          * to clear in anticipation of signalling.  It is OK if this
          * fails or if status is changed by waiting thread.
          */
-        int ws = node.waitStatus;
+        int ws = node.waitStatus; //头结点的状态
         if (ws < 0)
             compareAndSetWaitStatus(node, ws, 0);
 
@@ -652,15 +652,38 @@ public abstract class AbstractQueuedSynchronizer
          * traverse backwards from tail to find the actual
          * non-cancelled successor.
          */
-        Node s = node.next;
-        if (s == null || s.waitStatus > 0) {
-            s = null;
+        Node s = node.next; // 当前节点的下一个节点
+        if (s == null || s.waitStatus > 0) { // 如果下个节点是null或者下个节点被cancelled，就找到队列最开始的非cancelled的节点
+            s = null; // 从尾部节点开始找，到队首，找到队列第一个waitStatus<0的节点。
             for (Node t = tail; t != null && t != node; t = t.prev)
                 if (t.waitStatus <= 0)
                     s = t;
         }
-        if (s != null)
+        if (s != null)  // 如果当前节点的下个节点不为空，而且状态<=0，就把当前节点unpark
             LockSupport.unpark(s.thread);
+        //为什么要从后往前找第一个非Cancelled的节点呢
+        /**
+         * private Node addWaiter(Node mode) {
+         *         Node node = new Node(Thread.currentThread(), mode);
+         *         // Try the fast path of enq; backup to full enq on failure
+         *         //如果第一个线程上锁 执行力很长没释放  第二个线程加锁失败，那么会走到这一步  此时整个CLH队列还没初始化
+         *         Node pred = tail;//索所以tail为null 那么执行enq(node) 在这个方法可以证明是会虚拟一个节点
+         *         if (pred != null) {
+         *             node.prev = pred;
+         *             if (compareAndSetTail(pred, node)) {
+         *                 pred.next = node;
+         *                 return node;
+         *             }
+         *         }
+         *         enq(node); //  node  第二个线程加锁失败  要加入队列的线程信息
+         *         return node;
+         *     }
+         *     节点入队并不是原子操作，node.prev = pred; compareAndSetTail(pred, node) 这两个地方可以看作Tail入队的原子操作
+         *     但是此时pred.next = node;还没执行，如果这个时候执行了unparkSuccessor方法，就没办法从前往后找了，所以需要从后往前找。
+         *     还有一点原因，在产生CANCELLED状态节点的时候，先断开的是Next指针，Prev指针并未断开，
+         *     因此也是必须要从后往前遍历才能够遍历完全部的Node。
+         */
+
     }
 
     /**
@@ -836,6 +859,7 @@ public abstract class AbstractQueuedSynchronizer
      */
     private final boolean parkAndCheckInterrupt() {
         LockSupport.park(this);
+        //唤醒后，会执行return Thread.interrupted();，这个函数返回的是当前执行线程的中断状态，并清除。
         return Thread.interrupted();
     }
 
@@ -872,7 +896,8 @@ public abstract class AbstractQueuedSynchronizer
                     failed = false;
                     return interrupted; // 返回这个什么意思？
                 }//是否应该park的判断 假设t2一直在获取锁  这时候t3来了  t3park
-                if (shouldParkAfterFailedAcquire(p, node) &&
+                if (shouldParkAfterFailedAcquire(p, node) &&  //第一次返回false 并把状态改为-1 第二次返回true
+                                                            // 则执行后面的parkAndCheckInterrupt  调用locksupport。park住
                     parkAndCheckInterrupt())
                     interrupted = true;
             }
@@ -1199,6 +1224,12 @@ public abstract class AbstractQueuedSynchronizer
      * @param arg the acquire argument.  This value is conveyed to
         {@link #tryAcquire} but is otherwise uninterpreted and
         can represent anything you like.
+
+    ReentrantLock	使用AQS保存锁重复持有的次数。当一个线程获取锁时，ReentrantLock记录当前获得锁的线程标识，用于检测是否重复获取，以及错误线程试图解锁操作时异常情况的处理。
+    Semaphore	使用AQS同步状态来保存信号量的当前计数。tryRelease会增加计数，acquireShared会减少计数。
+    CountDownLatch	使用AQS同步状态来表示计数。计数为0时，所有的Acquire操作（CountDownLatch的await方法）才可以通过。
+    ReentrantReadWriteLock	使用AQS同步状态中的16位保存写锁持有的次数，剩下的16位用于保存读锁的持有次数。
+    ThreadPoolExecutor	Worker利用AQS同步状态实现对独占线程变量的设置（tryAcquire和tryRelease）。
      */
     public final void acquire(int arg) {
         if (!tryAcquire(arg) && // 尝试加锁  如果失败就会调用acquirequeued 加入队列排队；加锁成功则不会排队
@@ -1273,8 +1304,16 @@ public abstract class AbstractQueuedSynchronizer
      * @return the value returned from {@link #tryRelease}
      */
     public final boolean release(int arg) {
-        if (tryRelease(arg)) {
-            Node h = head;
+        if (tryRelease(arg)) {// 返回当前锁是不是没有被线程持有
+            // 上边如果返回true，说明该锁没有被任何线程持有
+            Node h = head; //头结点
+            // 头结点不为空并且头结点的waitStatus不是初始化节点情况，解除线程挂起状态 因为加锁入队排队的过程中后面的会把前面的状态改成-1
+            /**
+             * h == null Head还没初始化。初始情况下，head == null，第一个节点入队，Head会被初始化一个虚拟节点。
+             * 这里如果还没来得及入队，就会出现head == null 的情况。
+             * h != null && waitStatus == 0 表明后继节点对应的线程仍在运行中，不需要唤醒。
+             * h != null && waitStatus < 0 表明后继节点可能被阻塞了，需要唤醒。
+             */
             if (h != null && h.waitStatus != 0)
                 unparkSuccessor(h);
             return true;
