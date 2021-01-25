@@ -580,15 +580,15 @@ public abstract class AbstractQueuedSynchronizer
      * @param node the node to insert
      * @return node's predecessor
      */
-    private Node enq(final Node node) {
-        for (;;) {
-            Node t = tail;
+    private Node enq(final Node node) { //  node  第二个线程加锁失败  要加入队列的线程信息
+        for (;;) { //死循环
+            Node t = tail; //1.刚进来tail 围为空  2.第二次进来tail不是空了
             if (t == null) { // Must initialize
-                if (compareAndSetHead(new Node()))
+                if (compareAndSetHead(new Node())) //1.空节点 说的是node节点中的thread信息为空  对手等于队尾
                     tail = head;
             } else {
                 node.prev = t;
-                if (compareAndSetTail(t, node)) {
+                if (compareAndSetTail(t, node)) {//把线程2自己变成队尾  此时对手的thread为null  为什么这么设置？
                     t.next = node;
                     return t;
                 }
@@ -605,7 +605,8 @@ public abstract class AbstractQueuedSynchronizer
     private Node addWaiter(Node mode) {
         Node node = new Node(Thread.currentThread(), mode);
         // Try the fast path of enq; backup to full enq on failure
-        Node pred = tail;
+        //如果第一个线程上锁 执行力很长没释放  第二个线程加锁失败，那么会走到这一步  此时整个CLH队列还没初始化
+        Node pred = tail;//索所以tail为null 那么执行enq(node) 在这个方法可以证明是会虚拟一个节点
         if (pred != null) {
             node.prev = pred;
             if (compareAndSetTail(pred, node)) {
@@ -613,7 +614,7 @@ public abstract class AbstractQueuedSynchronizer
                 return node;
             }
         }
-        enq(node);
+        enq(node); //  node  第二个线程加锁失败  要加入队列的线程信息
         return node;
     }
 
@@ -792,9 +793,9 @@ public abstract class AbstractQueuedSynchronizer
      * @param node the node
      * @return {@code true} if thread should block
      */
-    private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
-        int ws = pred.waitStatus;
-        if (ws == Node.SIGNAL)
+    private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {  // 注意 是在for 循环里面执行的
+        int ws = pred.waitStatus; //第一次开始是0  没有找到在哪赋值为其他的  find useage 都是赋值CANCELLED
+        if (ws == Node.SIGNAL) // 第一次不会执行这里  第二次的时候 因为上一个节点的状态改成了是-1  表示要被后面的唤醒
             /*
              * This node has already set status asking a release
              * to signal it, so it can safely park.
@@ -815,6 +816,7 @@ public abstract class AbstractQueuedSynchronizer
              * need a signal, but don't park yet.  Caller will need to
              * retry to make sure it cannot acquire before parking.
              */
+            //第一次执行了这里 将前一个节点状态改成 -1
             compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
         }
         return false;
@@ -861,11 +863,15 @@ public abstract class AbstractQueuedSynchronizer
             for (;;) {
                 final Node p = node.predecessor();
                 if (p == head && tryAcquire(arg)) {
-                    setHead(node);
-                    p.next = null; // help GC
+                    //如果是对手  入队完成之后我要看上一节点是否park 如果上一个在park,那么我也要park.
+                    //判断自己是不是头部  其实判断的自己是不是第二个  因为第一个头部thread 是空的
+                    // 如果上一个节点没park,那就去竞争锁  还会再次尝试加锁 加锁失败后才会park住
+                    //  t1正在加锁执行  t2那么前一个节点就是头  那么他会死循环一直在竞争锁
+                    setHead(node); //还是空节点
+                    p.next = null; // help GC  把头的next置为null  因为t2已经拿到锁 再次验证了持有锁的线程不在队列里面
                     failed = false;
-                    return interrupted;
-                }
+                    return interrupted; // 返回这个什么意思？
+                }//是否应该park的判断 假设t2一直在获取锁  这时候t3来了  t3park
                 if (shouldParkAfterFailedAcquire(p, node) &&
                     parkAndCheckInterrupt())
                     interrupted = true;
@@ -1204,7 +1210,8 @@ public abstract class AbstractQueuedSynchronizer
                  * 2、tn(无所谓哪个线程，反正就是一个线程)持有了锁，那么由于加锁tn!=tf(tf是属于第一种情况，我们现在不考虑tf了)，
                  * 所以队列是一定被初始化了的，tc来加锁，那么队列当中有人在排队，故而他也去排队
                   */
-            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+                // addWaiter  初始化队列 并把线程2 作为队尾 对手的thread信息为null
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg)) //acquireQueued
             selfInterrupt();
     }
 
