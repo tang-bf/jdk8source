@@ -660,7 +660,7 @@ public abstract class AbstractQueuedSynchronizer
                     s = t;
         }
         if (s != null)  // 如果当前节点的下个节点不为空，而且状态<=0，就把当前节点unpark
-            LockSupport.unpark(s.thread);
+            LockSupport.unpark(s.thread);  //UNPARK之后去哪执行了 ？ 是去加锁之后park后面的代码 parkAndCheckInterrupt
         //为什么要从后往前找第一个非Cancelled的节点呢
         /**
          * private Node addWaiter(Node mode) {
@@ -859,8 +859,11 @@ public abstract class AbstractQueuedSynchronizer
      */
     private final boolean parkAndCheckInterrupt() {
         LockSupport.park(this);
-        //唤醒后，会执行return Thread.interrupted();，这个函数返回的是当前执行线程的中断状态，并清除。
+        //解锁被唤醒后，会执行return Thread.interrupted();，这个函数返回的是当前执行线程的中断状态，并清除。
         return Thread.interrupted();
+        //  interrupted()是静态方法：内部实现是调用的当前线程的isInterrupted()，并且会重置当前线程的中断状态
+        //  isInterrupted()是实例方法，是调用该方法的对象所表示的那个线程的isInterrupted()，不会重置当前线程的中断状态
+        //  interrupt（）方法  其作用是中断此线程（此线程不一定是当前线程，而是指调用该方法的Thread实例所代表的线程），但实际上只是给线程设置一个中断标志，线程仍会继续运行。
     }
 
     /*
@@ -902,7 +905,7 @@ public abstract class AbstractQueuedSynchronizer
                     interrupted = true;
             }
         } finally {
-            if (failed)
+            if (failed) //除非发生异常才可能走到这一步   cancelAcquire 取消队列中某个node节点排队  private修饰的
                 cancelAcquire(node);
         }
     }
@@ -1305,15 +1308,15 @@ public abstract class AbstractQueuedSynchronizer
      */
     public final boolean release(int arg) {
         if (tryRelease(arg)) {// 返回当前锁是不是没有被线程持有
-            // 上边如果返回true，说明该锁没有被任何线程持有
+            // 上边如果返回true，说明该锁没有被任何线程持有  解锁成功
             Node h = head; //头结点
             // 头结点不为空并且头结点的waitStatus不是初始化节点情况，解除线程挂起状态 因为加锁入队排队的过程中后面的会把前面的状态改成-1
             /**
              * h == null Head还没初始化。初始情况下，head == null，第一个节点入队，Head会被初始化一个虚拟节点。
-             * 这里如果还没来得及入队，就会出现head == null 的情况。
+             * 这里如果还没来得及入队，就会出现head == null 的情况。 单线程加锁解锁  根本都没有CLH那个队列 此时head 肯定为null
              * h != null && waitStatus == 0 表明后继节点对应的线程仍在运行中，不需要唤醒。
              * h != null && waitStatus < 0 表明后继节点可能被阻塞了，需要唤醒。
-             */
+             */// waitStatus =-1 说明队列中有人排队
             if (h != null && h.waitStatus != 0)
                 unparkSuccessor(h);
             return true;

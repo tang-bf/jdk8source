@@ -161,7 +161,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
         protected final boolean tryRelease(int releases) {
             int c = getState() - releases; //减少可重入次数
             if (Thread.currentThread() != getExclusiveOwnerThread()) // 当前线程不是持有锁的线程，抛出异常
-                throw new IllegalMonitorStateException();
+                throw new IllegalMonitorStateException();//只有持有锁的线程自己才会去解锁  这个异常什么情况下会发生？ 应该没有把
             boolean free = false;
             if (c == 0) { // 如果持有线程全部释放，将当前独占锁所有线程设置为null，并更新state
                 free = true;
@@ -472,7 +472,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
      *         hold this lock
      */
     public void unlock() {
-        sync.release(1);
+        sync.release(1);//解锁不区分公平非公平
     }
 
     /**
