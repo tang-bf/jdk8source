@@ -483,14 +483,14 @@ public class ReentrantReadWriteLock
                 compareAndSetState(c, c + SHARED_UNIT)) {
                 if (r == 0) {
                     firstReader = current; //第一个加锁的线程
-                    firstReaderHoldCount = 1;
+                    firstReaderHoldCount = 1; // 缓存的第一个线程的信息及加锁次数 存储的和cachedHoldCounter一样信息 应该也是出于优化考虑
                 } else if (firstReader == current) { // 当前线程是第一个上锁的线程
                     firstReaderHoldCount++;
                 } else {
-                    HoldCounter rh = cachedHoldCounter;
+                    HoldCounter rh = cachedHoldCounter;//只能存最后一个线程的相关信息 应该都是出于优化考虑吧
                     if (rh == null || rh.tid != getThreadId(current))
-                        cachedHoldCounter = rh = readHolds.get();
-                    else if (rh.count == 0)
+                        cachedHoldCounter = rh = readHolds.get(); //其他线程对锁的操作次数还是要从threadlocal中获取
+                    else if (rh.count == 0) //同一个线程加锁后解锁 立马又过来加锁  因为释放锁的时候会把它从threadlocal中remove掉
                         readHolds.set(rh);
                     rh.count++;
                 }
@@ -898,7 +898,8 @@ public class ReentrantReadWriteLock
          *
          * @throws UnsupportedOperationException always
          */
-        public Condition newCondition() {
+        public Condition newCondition() {// 读锁不能加条件 ，直接抛异常。因为条件必须是排它锁，如果不是排它锁，条件临界值永远不会被改变
+             //  写锁是可以的
             throw new UnsupportedOperationException();
         }
 
